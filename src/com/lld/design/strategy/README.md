@@ -3,4 +3,9 @@
    Input:   list of files, output file name.
    Output: Nothing
 
-2.
+-> Other questions could be multiple payment methods, searching, sorting or travel strategies.
+All will be coded on same principle.
+
+2. Write publisher subscriber classes using observer design pattern.
+
+3.
