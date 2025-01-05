@@ -8,4 +8,6 @@
 -> Other questions could be multiple payment methods, searching, sorting or travel strategies.
 All will be coded on same principle.
 
-3.
+3. Pizza billing system using decorator pattern
+
+4. Build house using Builder pattern
