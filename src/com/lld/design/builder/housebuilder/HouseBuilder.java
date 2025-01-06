@@ -1,21 +1,36 @@
 package com.lld.design.builder.housebuilder;
 
 public abstract class HouseBuilder {
-    private String description;
+    private StringBuilder description = new StringBuilder();
 
-    abstract HouseBuilder addWalls();
-    abstract HouseBuilder addDoorsAndWindows();
-    abstract HouseBuilder addLawn();
-    abstract HouseBuilder addGate() ;
-    abstract HouseBuilder parkingSpot();
-    abstract String build();
-
-    public String getDescription() {
-        return description;
+    protected abstract String getMaterial();
+    public HouseBuilder addWalls() {
+        description.append(getMaterial()).append(" Walls ");
+        return this;
     }
 
-    public void setDescription(String description) {
-        this.description = description;
+    public HouseBuilder addDoorsAndWindows() {
+        description.append(getMaterial()).append(" Doors and Windows ");
+        return this;
+    }
+
+    public HouseBuilder addLawn() {
+        description.append("Lawn ");
+        return this;
+    }
+
+    public HouseBuilder addGate() {
+        description.append(getMaterial()).append(" Gate ");
+        return this;
+    }
+
+    public HouseBuilder parkingSpot() {
+        description.append("Parking Spot ");
+        return this;
+    }
+
+    public String build() {
+        return description.toString();
     }
 
 }
