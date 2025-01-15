@@ -1,24 +1,54 @@
 package com.lld.problems.vendingmachine;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public class VendingMachine {
+    InventoryManager inventoryManager;
+    TransactionManager transactionManager;
+    MachineState currentState;
+
+    public VendingMachine(InventoryManager inventoryManager, TransactionManager transactionManager) {
+        this.currentState = new NoSelectionState(this);
+        this.transactionManager = transactionManager;
+        this.inventoryManager = inventoryManager;
+    }
+
+    public void restock(List<Product> products, List<ProductInfo> productInfoList) {
+        inventoryManager.restock(products,productInfoList);
+    }
+
+    public void selectProduct(Product product) {
+        currentState.selectProduct(product);
+    }
+
+    public void insertMoney(List<Coin> money) {
+        currentState.insertMoney(money);
+    }
+
+    public Product executeTransaction() {
+        return currentState.executeTransaction();
+    }
+
+    public void cancelTransaction() {
+        currentState.cancelTransaction();
+    }
+
+    public void setCurrentState(MachineState currentState) {
+        this.currentState = currentState;
+    }
+}
+
+public class InventoryManager {
     List<ProductInfo> productInfoList;
     Map<ProductInfo,List<Product>> inventory;
-
     Product currentProduct;
-    MachineState state;
-    int insertedAmount;
-    int refundAmount;
 
-    public VendingMachine() {
-        this.state = new NoSelectionState(this);
-        this.insertedAmount = 0;
-        currentProduct = null;
+    public InventoryManager() {
+        this.productInfoList = new ArrayList<>();
+        this.inventory = new HashMap<>();
+        this.currentProduct = null;
     }
+
 
     public void restock(List<Product> products, List<ProductInfo> productInfoList) {
         this.productInfoList = productInfoList; //all product list
@@ -27,27 +57,54 @@ public class VendingMachine {
             oldList.add(product);
             inventory.put(product.productInfo,oldList);
         }
-
     }
 
-    public void selectProduct(Product product) {
-        state.selectProduct(product);
+    public Product dispenseProduct() {
+        List<Product> prod = this.inventory.getOrDefault(this.currentProduct.productInfo, null);
+        if(prod == null) {
+            throw new OutOfStockException("Product out of stock");
+        }
+        Product productToBeReturned = prod.remove(prod.size()-1);
+        this.inventory.put(this.currentProduct.productInfo,prod);
+        return productToBeReturned;
+    }
+}
+
+public class TransactionManager {
+    int insertedAmount;
+    int refundAmount;
+
+    public TransactionManager() {
+        this.insertedAmount = 0;
+        this.refundAmount = 0;
     }
 
-    public void insertMoney(List<Coin> money) {
-        state.insertMoney(money);
+    public void insertMoney(List<Coin> coins) {
+        int value = 0;
+        for(Coin c: coins) value+=c.getValue();
+        this.insertedAmount = value;
     }
 
-    public Product executeTransaction() {
-        return state.executeTransaction();
+
+    public Product executeTransaction(InventoryManager inventoryManager) throws InsufficientFundsException, OutOfStockException{
+        if(inventoryManager.currentProduct.productInfo.price > this.insertedAmount) {
+            inventoryManager.currentProduct = null;
+            throw new InsufficientFundsException("Not enough money. Transaction Cancelled");
+        }
+        //dispense current product
+        Product prod = inventoryManager.dispenseProduct();
+        //calculate refund
+        this.refundAmount = this.insertedAmount - inventoryManager.currentProduct.productInfo.price;
+        this.insertedAmount = 0;
+        return  prod;
     }
 
-    public void cancelTransaction() {
-        state.cancelTransaction();
-    }
+    public List<Coin> processRefund() {
+        int refundValue = this.refundAmount;
+        //use coin change to get list of coins
+        this.refundAmount = 0;
+        return List.of(Coin.FIVE);
 
-    public void setState(MachineState state) {
-        this.state = state;
     }
 }
 
@@ -92,8 +149,8 @@ public class NoSelectionState implements MachineState {
 
     @Override
     public void selectProduct(Product product) {
-        this.vendingMachine.setState(new HasSelectionState(vendingMachine));
-        this.vendingMachine.currentProduct = product;
+        this.vendingMachine.inventoryManager.currentProduct = product;
+        this.vendingMachine.setCurrentState(new HasSelectionState(vendingMachine));
     }
 
     @Override
@@ -103,7 +160,7 @@ public class NoSelectionState implements MachineState {
 
     @Override
     public Product executeTransaction() {
-        throw new InvalidOperationException("No product selected yet"); //make custom error
+        throw new InvalidOperationException("No product selected yet");
     }
 
     @Override
@@ -113,7 +170,7 @@ public class NoSelectionState implements MachineState {
 
     @Override
     public void cancelTransaction() {
-        throw new InvalidOperationException("No product selected yet"); //make custom error
+        throw new InvalidOperationException("No product selected yet");
     }
 }
 
@@ -136,31 +193,25 @@ public class VendingState implements MachineState {
 
     @Override
     public Product executeTransaction() {
-        int change = vendingMachine.insertedAmount - vendingMachine.currentProduct.productInfo.price;
-        //dispense current product
-        List<Product> prod = vendingMachine.inventory.getOrDefault(vendingMachine.currentProduct.productInfo, null);
-        if(prod == null) {
-            vendingMachine.refundAmount = vendingMachine.insertedAmount;
-            vendingMachine.setState(new RefundState(vendingMachine));
+        Product product;
+        try {
+             product = vendingMachine.transactionManager.executeTransaction(vendingMachine.inventoryManager);
+        } catch (InsufficientFundsException e) {
+            vendingMachine.setCurrentState(new NoSelectionState(vendingMachine));
+            return null;
+        } catch (OutOfStockException e) {
+            vendingMachine.transactionManager.refundAmount = vendingMachine.transactionManager.insertedAmount;
+            vendingMachine.setCurrentState(new RefundState(vendingMachine));
+            return null;
         }
-        Product productToBeReturned = prod.remove(prod.size()-1);
-        vendingMachine.inventory.put(vendingMachine.currentProduct.productInfo,prod);
-        //return change
-        if(change == 0) {
-            vendingMachine.refundAmount = 0;
-            vendingMachine.insertedAmount = 0;
-            vendingMachine.setState(new NoSelectionState(vendingMachine));
-        }
-        else {
-            vendingMachine.refundAmount = change;
-            vendingMachine.setState(new RefundState(vendingMachine));
-        }
-        return productToBeReturned;
+        vendingMachine.setCurrentState(new RefundState(vendingMachine));
+        return product;
+
     }
 
     @Override
     public List<Coin> processRefund() {
-        throw new InvalidOperationException("No refund to process");
+        throw new InvalidOperationException("No refund to process yet");
     }
 
     @Override
@@ -183,16 +234,9 @@ public class HasSelectionState implements MachineState {
 
     @Override
     public void insertMoney(List<Coin> coins) {
-        int value=0;
-        for(Coin c: coins) value+=c.getValue();
-        if(vendingMachine.currentProduct.productInfo.price > value) {
-            vendingMachine.setState(new NoSelectionState(vendingMachine));
-            vendingMachine.currentProduct = null;
-            throw new InsufficientFundsException("Not enough money. Transaction Cancelled");
-        }
-        vendingMachine.insertedAmount = value;
-        vendingMachine.setState(new VendingState(vendingMachine));
-        vendingMachine.executeTransaction();
+        vendingMachine.transactionManager.insertMoney(coins);
+        vendingMachine.setCurrentState(new VendingState(vendingMachine));
+        vendingMachine.executeTransaction(); //call vendingState's execute transaction
     }
 
     @Override
@@ -207,7 +251,9 @@ public class HasSelectionState implements MachineState {
 
     @Override
     public void cancelTransaction() {
-        throw new InvalidOperationException("No product selected yet"); //make custom error
+        vendingMachine.inventoryManager.currentProduct = null;
+        vendingMachine.setCurrentState(new NoSelectionState(vendingMachine));
+        System.out.println("Transaction cancelled. Select product again.");
     }
 }
 
@@ -235,12 +281,9 @@ public class RefundState implements MachineState {
 
     @Override
     public List<Coin> processRefund() {
-        int refundValue = vendingMachine.refundAmount;
-        vendingMachine.setState(new NoSelectionState(vendingMachine));
-        vendingMachine.refundAmount = 0;
-        vendingMachine.insertedAmount = 0;
-        //use coin change to get list of coins
-        return List.of(Coin.FIVE);
+        List<Coin> refund = vendingMachine.transactionManager.processRefund();
+        vendingMachine.setCurrentState(new NoSelectionState(vendingMachine));
+        return refund;
     }
 
 
@@ -269,9 +312,14 @@ public class InsufficientFundsException extends RuntimeException {
     }
 }
 
-
 public class InvalidOperationException extends RuntimeException {
     public InvalidOperationException(String message) {
+        super(message);
+    }
+}
+
+public class OutOfStockException extends RuntimeException {
+    public OutOfStockException(String message) {
         super(message);
     }
 }
