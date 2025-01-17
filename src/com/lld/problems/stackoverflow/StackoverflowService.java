@@ -1,6 +1,7 @@
 package com.lld.problems.stackoverflow;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -78,6 +79,39 @@ public enum PostTag {
     PROGRAMMING, DEVOPS, CLOUD
 }
 
+public class SearchService {
+    private ConcurrentHashMap<String, List<Question>> keywordIndex = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, List<Question>> tagsIndex = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, List<Question>> userIndex = new ConcurrentHashMap<>();
+
+    public void addQuestionToIndex(Question question) {
+        String[] keywords = question.postContent.split("\\s+");
+        for(String key: keywords) {
+            keywordIndex.computeIfAbsent(key, k -> new ArrayList<>()) //returns existing or computed val
+                    .add(question);
+        }
+        List<PostTag> postTags = question.tags;
+        for(PostTag tag : postTags) {
+            tagsIndex.computeIfAbsent(tag.toString(),k-> new ArrayList<>()).add(question);
+        }
+        User user = question.postedBy;
+        userIndex.computeIfAbsent(user.userId, k -> new ArrayList<>()).add(question);
+    }
+
+    public List<Question> searchByKeyword(String keyword) {
+        return keywordIndex.getOrDefault(keyword.toLowerCase(), new ArrayList<>());
+    }
+
+    public List<Question> searchByTag(String tag) {
+        return tagsIndex.getOrDefault(tag.toLowerCase(), new ArrayList<>());
+    }
+
+    public List<Question> searchByUser(String userID) {
+        return userIndex.getOrDefault(userID, new ArrayList<>());
+    }
+
+}
+
 public class InMemoryRepository { //We can make separate UserRepo, AnswerRepo and all, but to simplify only one
     private static Map<Integer,User> userMap = new ConcurrentHashMap<>();
     private static Map<Integer,Question> questionMap = new ConcurrentHashMap<>();
@@ -104,6 +138,12 @@ public class UserService {
     private static final AtomicInteger answerIDCounter = new AtomicInteger(0);
     private static final AtomicInteger commentIDCounter = new AtomicInteger(0);
     private static final AtomicInteger voteIDCounter = new AtomicInteger(0);
+
+    private SearchService searchService;
+
+    public UserService(SearchService searchService) {
+        this.searchService = searchService;
+    }
 
     public void addQuestion(User user, String content, List<PostTag> tags) {
         int questionId = questionIDCounter.incrementAndGet();
@@ -149,7 +189,9 @@ public class UserService {
     }
 
     public List<Question> searchQuestions(String query) {
-        //make an index for search
-        return null;
+        List<Question> queryResult = searchService.searchByKeyword(query);
+        queryResult.addAll(searchService.searchByTag(query));
+        queryResult.addAll(searchService.searchByUser(query));
+        return queryResult;
     }
 }
