@@ -13,6 +13,10 @@ public class ProducerConsumer {
         Semaphore semaphoreCons = new Semaphore(0); //consumer woultn't start directly
         Semaphore semaphoreBuffer = new Semaphore(1);
         //producer
+        //using counting semaphone
+//        semaphoreProd = new CountingSemaphore(capacity, capacity); //(totalCap,initialCap)
+ //       semaphoreCons = new CountingSemaphore(capacity, 0);
+//    CountingSemaphore semaphoreBuffer = new CountingSemaphore(1, 1);
         Runnable producer = () -> {
             try {
                 while (true) {
